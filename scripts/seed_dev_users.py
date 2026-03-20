@@ -25,6 +25,13 @@ DEV_USERS = [
         is_manager=True,
     ),
     UserCreate(
+        email="sanchobuendia@gmail.com",
+        full_name="Aureliano Sancho Souza Paiva",
+        role="hr_admin",
+        department="RH",
+        is_manager=True,
+    ),
+    UserCreate(
         email="carlos@empresa.com",
         full_name="Carlos Lima",
         role="manager",

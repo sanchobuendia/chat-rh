@@ -14,9 +14,14 @@ class Settings(BaseSettings):
     DB_PGVECTOR: str
 
     embedding_provider: str = "local"
-    embedding_dimension: int = 128
+    embedding_dimension: int = 384
+    embedding_model: str = "intfloat/multilingual-e5-small"
+    retrieval_query_count: int = 3
+    retrieval_top_k_per_query: int = 3
+    retrieval_max_distance: float = 0.35
     MODEL_PROVIDER: str = "bedrock_converse"
     BEDROCK_MODEL_ID: str = "us.anthropic.claude-3-5-sonnet-20240620-v1:0"
+    BEDROCK_EMBEDDING_MODEL_ID: str = "amazon.titan-embed-text-v2:0"
     MODEL_TEMPERATURE: float = 0.2
 
     ingestion_source_dir: str = "/Users/aurelianosancho/Documents/GitHub/UNIFIQUE/RH/seed_data/documents"

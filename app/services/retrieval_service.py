@@ -1,16 +1,15 @@
 import logging
 from app.repositories.base_repository import BaseRepository
+from app.core.config import get_settings
 from app.repositories.vector_repository import VectorRepository
 from app.schemas.auth import AuthContext
 from app.services.embedding_service import EmbeddingService
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 class RetrievalService:
-    QUERY_COUNT = 3
-    TOP_K_PER_QUERY = 3
-
     def __init__(self, app_db, vector_db, llm_service):
         self.app_db = app_db
         self.vector_db = vector_db
@@ -18,6 +17,9 @@ class RetrievalService:
         self.vector_repo = VectorRepository(vector_db)
         self.embedding_service = EmbeddingService()
         self.llm_service = llm_service
+        self.query_count = settings.retrieval_query_count
+        self.top_k_per_query = settings.retrieval_top_k_per_query
+        self.max_distance = settings.retrieval_max_distance
 
     def search(self, user: AuthContext, question: str, top_k: int = 4) -> list[dict]:
         allowed_base_ids = self.base_repo.list_user_base_ids(user.user_id)
@@ -33,7 +35,7 @@ class RetrievalService:
             logger.debug("retrieval_skipped_no_access user_id=%s", user.user_id)
             return []
 
-        optimized_queries = self.llm_service.generate_search_queries(question=question, count=self.QUERY_COUNT)
+        optimized_queries = self.llm_service.generate_search_queries(question=question, count=self.query_count)
         all_results: list[dict] = []
 
         for query in optimized_queries:
@@ -41,14 +43,16 @@ class RetrievalService:
             query_results = self.vector_repo.similarity_search(
                 query_embedding=query_embedding,
                 allowed_base_ids=allowed_base_ids,
-                top_k=self.TOP_K_PER_QUERY,
+                top_k=self.top_k_per_query,
+                max_distance=self.max_distance,
                 search_query=query,
             )
             logger.debug(
-                "retrieval_query_results user_id=%s query=%r count=%s",
+                "retrieval_query_results user_id=%s query=%r count=%s max_distance=%s",
                 user.user_id,
                 query,
                 len(query_results),
+                self.max_distance,
             )
             all_results.extend(query_results)
 
@@ -69,6 +73,13 @@ class RetrievalService:
             optimized_queries,
         )
         final_results = deduped_results[:top_k]
+        if not final_results:
+            logger.debug(
+                "retrieval_no_relevant_results user_id=%s max_distance=%s question=%r",
+                user.user_id,
+                self.max_distance,
+                question,
+            )
         logger.debug(
             "retrieval_final_results user_id=%s requested_top_k=%s returned=%s",
             user.user_id,

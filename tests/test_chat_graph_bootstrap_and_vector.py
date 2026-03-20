@@ -98,7 +98,7 @@ def test_chat_service_run_rag_smalltalk_and_payroll(monkeypatch):
 
         def search(self, user, question, top_k):
             return [
-                {"document_id": 1, "title": "Doc", "chunk_id": 9, "content": "Trecho relevante"},
+                {"document_id": 1, "title": "Doc", "chunk_id": 9, "content": "Trecho relevante", "distance": 0.1, "score": 0.9},
             ]
 
     class FakePayrollService:
@@ -128,6 +128,7 @@ def test_chat_service_run_rag_smalltalk_and_payroll(monkeypatch):
 
     assert rag.route == "rag"
     assert rag.citations[0].title == "Doc"
+    assert rag.citations[0].score == 0.9
     assert smalltalk.answer.startswith("SMALLTALK:Ana")
     assert payroll_result.answer == "PAYROLL:Ana"
     assert "Informe o nome do colaborador" in payroll_missing_name.answer
@@ -245,11 +246,12 @@ def test_vector_repository_methods(monkeypatch):
 
     doc = repo.create_document(1, "Doc", "/tmp/doc", "internal")
     chunk = repo.create_chunk(1, 1, 0, "abc", [0.1])
-    rows = repo.similarity_search([0.1], [1], top_k=2, search_query="q")
+    rows = repo.similarity_search([0.1], [1], top_k=2, max_distance=0.3, search_query="q")
 
     assert doc.title == "Doc"
     assert chunk.content == "abc"
     assert rows[0]["chunk_id"] == 1
+    assert rows[0]["score"] == pytest.approx(0.9)
     assert repo.similarity_search([0.1], [], top_k=2) == []
 
 

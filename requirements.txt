@@ -7,6 +7,9 @@ pydantic
 pydantic-settings
 python-dotenv
 python-multipart
+numpy<2
+torch==2.2.2
+sentence-transformers==2.7.0
 langgraph
 langgraph-checkpoint-postgres
 langchain
@@ -23,4 +26,3 @@ psycopg2
 pypdf
 python-docx
 coverage
-pytest

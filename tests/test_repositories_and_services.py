@@ -179,13 +179,13 @@ def test_retrieval_service_returns_deduped_results(monkeypatch):
         def __init__(self, db):
             self.db = db
 
-        def similarity_search(self, query_embedding, allowed_base_ids, top_k, search_query):
+        def similarity_search(self, query_embedding, allowed_base_ids, top_k, max_distance, search_query):
             if search_query == "q1":
                 return [
-                    {"chunk_id": 1, "document_id": 1, "title": "A", "content": "x"},
-                    {"chunk_id": 2, "document_id": 1, "title": "A", "content": "y"},
+                    {"chunk_id": 1, "document_id": 1, "title": "A", "content": "x", "distance": 0.1, "score": 0.9},
+                    {"chunk_id": 2, "document_id": 1, "title": "A", "content": "y", "distance": 0.2, "score": 0.8},
                 ]
-            return [{"chunk_id": 1, "document_id": 1, "title": "A", "content": "x"}]
+            return [{"chunk_id": 1, "document_id": 1, "title": "A", "content": "x", "distance": 0.1, "score": 0.9}]
 
     class FakeEmbeddingService:
         def embed(self, text):
@@ -208,7 +208,46 @@ def test_retrieval_service_returns_deduped_results(monkeypatch):
 
     results = service.search(user, "question", top_k=1)
 
-    assert results == [{"chunk_id": 1, "document_id": 1, "title": "A", "content": "x"}]
+    assert results == [{"chunk_id": 1, "document_id": 1, "title": "A", "content": "x", "distance": 0.1, "score": 0.9}]
+
+
+def test_retrieval_service_returns_empty_when_threshold_filters_everything(monkeypatch):
+    from app.services import retrieval_service as module
+
+    class FakeBaseRepository:
+        def __init__(self, db):
+            self.db = db
+
+        def list_user_base_ids(self, user_id):
+            return [10]
+
+    class FakeVectorRepository:
+        def __init__(self, db):
+            self.db = db
+
+        def similarity_search(self, query_embedding, allowed_base_ids, top_k, max_distance, search_query):
+            return []
+
+    class FakeEmbeddingService:
+        def embed(self, text):
+            return [0.1, 0.2]
+
+    llm = SimpleNamespace(generate_search_queries=lambda question, count: ["q1"])
+    monkeypatch.setattr(module, "BaseRepository", FakeBaseRepository)
+    monkeypatch.setattr(module, "VectorRepository", FakeVectorRepository)
+    monkeypatch.setattr(module, "EmbeddingService", FakeEmbeddingService)
+
+    service = RetrievalService(app_db=object(), vector_db=object(), llm_service=llm)
+    user = AuthContext(
+        user_id=1,
+        email="ana@example.com",
+        full_name="Ana",
+        role="employee",
+        department="RH",
+        is_manager=False,
+    )
+
+    assert service.search(user, "question", top_k=1) == []
 
 
 def test_retrieval_service_returns_empty_when_user_has_no_access(monkeypatch):

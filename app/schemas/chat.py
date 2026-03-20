@@ -12,6 +12,8 @@ class Citation(BaseModel):
     title: str
     chunk_id: int
     snippet: str
+    distance: float | None = None
+    score: float | None = None
 
 
 class ChatResponse(BaseModel):

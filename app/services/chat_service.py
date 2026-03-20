@@ -78,6 +78,8 @@ class ChatService:
                     "title": item["title"],
                     "chunk_id": item["chunk_id"],
                     "snippet": item["content"][:180],
+                    "distance": item.get("distance"),
+                    "score": item.get("score"),
                 }
                 for item in results
             ]

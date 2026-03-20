@@ -30,6 +30,7 @@ def test_get_settings_uses_env_and_cache(monkeypatch):
 
     assert settings.app_name == "chat-rh-test"
     assert settings.DB_USERS == "sqlite:///users.db"
+    assert settings.embedding_model == "intfloat/multilingual-e5-small"
     assert cached is settings
 
 
@@ -114,16 +115,107 @@ def test_router_service_delegates_to_llm():
     assert RouterService(llm).route("Oi") == "smalltalk"
 
 
-def test_embedding_service_returns_normalized_vector(monkeypatch):
+def test_embedding_service_uses_local_sentence_transformer(monkeypatch):
     from app.services import embedding_service as module
 
-    monkeypatch.setattr(module.settings, "embedding_dimension", 4)
+    module.get_embedder.cache_clear()
     monkeypatch.setattr(module.settings, "embedding_provider", "local")
+    monkeypatch.setattr(module.settings, "embedding_model", "intfloat/multilingual-e5-small")
+
+    class FakeVector:
+        def tolist(self):
+            return [0.5, 0.5, 0.5, 0.5]
+
+    class FakeSentenceTransformer:
+        def __init__(self, model_name):
+            assert model_name == "intfloat/multilingual-e5-small"
+
+        def encode(self, text, normalize_embeddings):
+            assert text == "hello"
+            assert normalize_embeddings is True
+            return FakeVector()
+
+    monkeypatch.setattr("sentence_transformers.SentenceTransformer", FakeSentenceTransformer)
 
     vector = EmbeddingService().embed("hello")
 
     assert len(vector) == 4
-    assert pytest.approx(sum(item * item for item in vector), rel=1e-6) == 1.0
+    assert vector == [0.5, 0.5, 0.5, 0.5]
+
+
+def test_embedding_service_reuses_cached_embedder(monkeypatch):
+    from app.services import embedding_service as module
+
+    module.get_embedder.cache_clear()
+    monkeypatch.setattr(module.settings, "embedding_provider", "local")
+    monkeypatch.setattr(module.settings, "embedding_model", "intfloat/multilingual-e5-small")
+    calls = {"count": 0}
+
+    class FakeVector:
+        def tolist(self):
+            return [0.1, 0.2]
+
+    class FakeSentenceTransformer:
+        def __init__(self, model_name):
+            calls["count"] += 1
+
+        def encode(self, text, normalize_embeddings):
+            return FakeVector()
+
+    monkeypatch.setattr("sentence_transformers.SentenceTransformer", FakeSentenceTransformer)
+
+    first = EmbeddingService().embed("hello")
+    second = EmbeddingService().embed("world")
+
+    assert first == [0.1, 0.2]
+    assert second == [0.1, 0.2]
+    assert calls["count"] == 1
+
+
+def test_embedding_service_uses_openai_embedder(monkeypatch):
+    from app.services import embedding_service as module
+
+    module.get_embedder.cache_clear()
+    class FakeOpenAIEmbeddings:
+        def __init__(self, model):
+            self.model = model
+
+        def embed_query(self, text):
+            return [0.1, 0.2, 0.3]
+
+    monkeypatch.setattr(module.settings, "embedding_provider", "openai")
+    monkeypatch.setattr(module.settings, "embedding_model", "text-embedding-3-small")
+    monkeypatch.setattr("langchain_openai.OpenAIEmbeddings", FakeOpenAIEmbeddings)
+
+    assert EmbeddingService().embed("hello") == [0.1, 0.2, 0.3]
+
+
+def test_embedding_service_uses_bedrock_embedder(monkeypatch):
+    from app.services import embedding_service as module
+
+    module.get_embedder.cache_clear()
+    class FakeBedrockEmbeddings:
+        def __init__(self, model_id):
+            self.model_id = model_id
+
+        def embed_query(self, text):
+            return [0.4, 0.5]
+
+    monkeypatch.setattr(module.settings, "embedding_provider", "bedrock")
+    monkeypatch.setattr(module.settings, "BEDROCK_EMBEDDING_MODEL_ID", "amazon.titan-embed-text-v2:0")
+    monkeypatch.setattr("langchain_aws.BedrockEmbeddings", FakeBedrockEmbeddings)
+
+    assert EmbeddingService().embed("hello") == [0.4, 0.5]
+
+
+def test_embedding_service_rejects_unknown_provider(monkeypatch):
+    from app.services import embedding_service as module
+
+    module.get_embedder.cache_clear()
+    monkeypatch.setattr(module.settings, "embedding_provider", "unknown")
+
+    with pytest.raises(ValueError, match="Unsupported embedding provider"):
+        EmbeddingService().embed("hello")
 
 
 def test_model_factory_initializes_chat_model(monkeypatch):
@@ -199,7 +291,9 @@ def test_schema_models_validate_from_attributes():
     assert RevokeAccessRequest(email="user@example.com", slug="rh").email == "user@example.com"
     assert UserCreate(email="user@example.com", full_name="User").role == "employee"
     assert ChatRequest().thread_id == "test01"
-    assert Citation(document_id=1, title="Doc", chunk_id=2, snippet="a").chunk_id == 2
+    citation = Citation(document_id=1, title="Doc", chunk_id=2, snippet="a", distance=0.12, score=0.88)
+    assert citation.chunk_id == 2
+    assert citation.score == 0.88
     assert ChatResponse(answer="ok", route="rag", citations=[]).answer == "ok"
     assert PayrollLookupResponse(
         employee_name="Ana",

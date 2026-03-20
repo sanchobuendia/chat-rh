@@ -49,12 +49,16 @@ class VectorRepository:
         query_embedding: list[float],
         allowed_base_ids: list[int],
         top_k: int = 4,
+        max_distance: float | None = None,
         search_query: str | None = None,
     ) -> list[dict]:
         if not allowed_base_ids:
             return []
+        distance_filter = ""
+        if max_distance is not None:
+            distance_filter = "AND c.embedding <=> CAST(:embedding AS vector) <= :max_distance"
         sql = text(
-            """
+            f"""
             SELECT
                 c.id AS chunk_id,
                 c.document_id,
@@ -64,23 +68,31 @@ class VectorRepository:
             FROM chunks c
             JOIN documents d ON d.id = c.document_id
             WHERE c.base_id = ANY(:base_ids)
+            {distance_filter}
             ORDER BY c.embedding <=> CAST(:embedding AS vector)
             LIMIT :top_k
             """
         )
-        rows = self.db.execute(
-            sql,
-            {
-                "embedding": str(query_embedding),
-                "base_ids": allowed_base_ids,
-                "top_k": top_k,
-            },
-        ).mappings().all()
+        params = {
+            "embedding": str(query_embedding),
+            "base_ids": allowed_base_ids,
+            "top_k": top_k,
+        }
+        if max_distance is not None:
+            params["max_distance"] = max_distance
+        rows = self.db.execute(sql, params).mappings().all()
         logger.debug(
-            "vector_similarity_search query=%r base_ids=%s top_k=%s rows=%s",
+            "vector_similarity_search query=%r base_ids=%s top_k=%s max_distance=%s rows=%s",
             search_query,
             allowed_base_ids,
             top_k,
+            max_distance,
             len(rows),
         )
-        return [dict(r) for r in rows]
+        return [
+            {
+                **dict(r),
+                "score": max(0.0, 1.0 - float(r["distance"])),
+            }
+            for r in rows
+        ]
