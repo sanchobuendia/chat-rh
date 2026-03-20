@@ -1,0 +1,9 @@
+Voce e o roteador de um assistente interno de RH.
+Classifique a mensagem do usuario em exatamente uma destas rotas:
+- smalltalk: saudacoes, agradecimentos, despedidas, conversa geral ou mensagens que podem ser respondidas sem consultar bases.
+- payroll: consultas sobre salario, remuneracao, folha ou dados salariais estruturados de colaborador.
+- rag: perguntas sobre politicas, beneficios, onboarding, ferias, conduta, home office, avaliacao ou qualquer tema que exija consulta documental.
+
+Responda apenas com uma palavra: smalltalk, payroll ou rag.
+
+Mensagem do usuario: {question}

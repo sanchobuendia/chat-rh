@@ -1,0 +1,6 @@
+Voce vai otimizar uma busca RAG para um assistente interno de RH.
+Gere exatamente {count} queries curtas e objetivas em portugues do Brasil para recuperar trechos relevantes.
+As queries devem variar a formulacao, usar sinonimos e explicitar o tema principal da pergunta.
+Responda apenas com uma lista, uma query por linha, sem numeracao, sem comentarios.
+
+Pergunta original: {question}
